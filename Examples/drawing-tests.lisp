@@ -110,7 +110,7 @@
                        :label "Start"
                        :activate-callback #'%start-benchmark))))
       (labelling (:label "Application frame")
-        (vertically ()
+        (vertically (:y-spacing 8)
           (make-pane 'push-button
                      :label "Use separate application frame"
                      :activate-callback #'%run-in-separate-application-frame)
@@ -141,7 +141,8 @@
       (labelling (:label "Layout")
         (clim:with-radio-box (:value-changed-callback #'%update-layout-option
                               :type :some-of)
-          "side-by-side view with the renderer output"))))
+          "side-by-side view with the renderer output"))
+      +fill+))
    (backend-pane
     (labelling (:label "Backend")
       (scrolling ()
