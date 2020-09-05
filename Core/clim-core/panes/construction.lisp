@@ -164,7 +164,7 @@ returned or error is signaled depending on the argument ERRORP.")
    (redisplay-needed  :accessor pane-redisplay-needed
                       :initarg :redisplay-needed :initform nil))
   (:default-initargs
-   :foreground +black+
+   :foreground +gray10+
    :background *3d-normal-color*
    :text-style *default-text-style*
    :align-x :left
