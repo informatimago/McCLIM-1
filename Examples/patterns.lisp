@@ -8,7 +8,10 @@
 ;;;
 ;;; Pattern and design-related demos.
 
-(in-package :clim-demo)
+(defpackage #:clim-demo.patterns
+  (:use #:clim-lisp #:clim)
+  (:export #:pattern-design-test))
+(in-package #:clim-demo.patterns)
 
 ;;; uniform designs arranged in a pattern
 (eval-when (:load-toplevel :compile-toplevel :execute)
@@ -89,7 +92,7 @@ Space: redisplay application")
 
 (defvar *draw* :pattern)
 
-(defclass my-basic-pane (clim:basic-pane clime:always-repaint-background-mixin) ())
+(defclass my-basic-pane (basic-pane clime:always-repaint-background-mixin) ())
 
 (define-application-frame pattern-design-test ()
   ()
@@ -109,14 +112,14 @@ Space: redisplay application")
                                           (draw-string pane
                                                        (format nil "Current draw is ~a." *draw*)
                                                        20 220)))))
-          (pane1 :application :display-function #'display :scroll-bars :vertical)
-          (pane2 :application :display-function #'display :scroll-bars nil)
+          (pane1 :application :display-function 'display :scroll-bars :vertical)
+          (pane2 :application :display-function 'display :scroll-bars nil)
           ;; Bug #7: clx-fb backend doesn't work with panes like this one.
           (pane4 (make-pane 'my-basic-pane :height *total-height*)))
-  (:layouts (default (clim:vertically ()
+  (:layouts (default (vertically ()
                        (235
-                        (clim:horizontally () info1 info2))
-                       (clim:horizontally ()
+                        (horizontally () info1 info2))
+                       (horizontally ()
                          (1/4 (labelling (:label "Application :SCROLL-BARS :BOTH")
                                 pane1))
                          (1/4 (labelling (:label "Application")
@@ -272,7 +275,7 @@ right-trimmed for spaces."
       (if (extended-output-stream-p pane)
           (stream-cursor-position pane)
           (transform-position (medium-transformation (sheet-medium pane)) 0 0))
-    (clim:with-identity-transformation (pane)
+    (with-identity-transformation (pane)
       (draw-string pane (format nil description)
                    (+ x 5)
                    (+ y *block-height* -10)
@@ -321,7 +324,8 @@ right-trimmed for spaces."
   (with-translation (pane 5 5)
     (test-example pane)))
 
-(defmethod display ((frame pattern-design-test) pane &aux (draw *draw*))
+(defun display (frame pane &aux (draw *draw*))
+  (declare (ignore frame))
   (do ((i 5 (+ i 16))
        (j 5 (+ j 16))
        (max-i *text-right-margin*)
@@ -396,10 +400,13 @@ right-trimmed for spaces."
          #1#))
 
 (define-pattern-design-test-command (exit :keystroke #\q) ()
-  (clim:frame-exit *application-frame*))
+  (frame-exit *application-frame*))
 
 (define-pattern-design-test-command (com-restart :keystroke #\r) ()
-  (run-demo 'pattern-design-test :background t)
+  (bt:make-thread (lambda ()
+                    (run-frame-top-level
+                     (make-application-frame 'pattern-design-test)))
+                  :initial-bindings `((*default-server-path* . ',*default-server-path*)))
   ;; frame-exit throws! we need to start a new demo before it, because rest of
   ;; the body is never executed.
-  (clim:frame-exit *application-frame*))
+  (frame-exit *application-frame*))
