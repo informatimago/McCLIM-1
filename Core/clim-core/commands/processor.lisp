@@ -22,7 +22,9 @@
                                          &body body)
   (with-gensyms (table)
     `(let* ((,table (find-command-table ,command-table))
-            (,keystroke-var (slot-value ,table 'keystroke-accelerators)))
+            (,keystroke-var (loop for item in (slot-value ,table 'menu)
+                                  for acc = (command-menu-item-keystroke item)
+                                  when acc collect acc)))
        ,@body)))
 
 (defun command-line-command-parser (command-table stream)
@@ -167,6 +169,17 @@
         (*command-unparser* command-unparser)
         (*partial-command-parser* partial-command-parser)
         (*accelerator-gestures* keystrokes))
+    (handler-bind
+        ((accelerator-gesture
+           (lambda (c &aux (event (accelerator-gesture-event c)))
+             (multiple-value-bind (item item-table)
+                 (lookup-keystroke-item event command-table)
+               (format *debug-io* "~a (in ~a) -- ~a~%"
+                       item;(command-menu-item-type item)
+                       item-table
+                       command-table)))))
+      (read-command command-table :stream stream))
+    #+ (or)
     (handler-case (read-command command-table :stream stream)
       (accelerator-gesture (c)
         ;; If lookup-keystroke-item below returns a partial command, invoke the
