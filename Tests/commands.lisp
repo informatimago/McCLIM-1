@@ -5,73 +5,100 @@
 
 ;;; Utilities
 
-(defmacro with-command-table ((var name) &body body)
+(defmacro with-command-table ((var name &rest args) &body body)
   (alexandria:once-only (name)
-    `(let ((,var (make-command-table ,name)))
+    `(let ((,var (make-command-table ,name ,@args)))
        (declare (ignorable ,var))
        (unwind-protect
             (progn ,@body)
          (remhash ,name climi::*command-tables*)))))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; command tables
-(define-command-table no-menu-test-table)
+(defmacro with-command-tables (tables &body body)
+  (if (null (cdr tables))
+      `(with-command-table ,(car tables)
+         ,@body)
+      `(with-command-table ,(car tables)
+         (with-command-tables ,(cdr tables)
+           ,@body))))
 
-(add-command-to-command-table '(com-test-command) 'no-menu-test-table
-                              :keystroke '(#\t))
+
+;;; command tables
 
 (test commands.map-over-command-table-keystrokes.no-menu
-  (let ((count 0))
-    (map-over-command-table-keystrokes
-     (lambda (menu-name gesture item)
-       (incf count)
-       (is (equal nil menu-name))
-       (is (equal '(:keyboard #\t 0) gesture))
-       (is (equal (lookup-keystroke-command-item
-                   gesture 'no-menu-test-table)
-                  (command-menu-item-value item))))
-     'no-menu-test-table)
-    (is (= 1 count))))
-
-(define-command-table menu-test-table)
-
-(add-command-to-command-table '(com-test-command) 'menu-test-table
-                              :keystroke '(#\u)
-                              :menu "Test")
+  (with-command-table (ct nil)
+    (let ((count 0))
+      (add-command-to-command-table '(com-test-command) ct :keystroke '(#\t))
+      (map-over-command-table-keystrokes
+       (lambda (menu-name gesture item)
+         (incf count)
+         (is (equal nil menu-name))
+         (is (equal '(:keyboard #\t 0) gesture))
+         (is (equal (lookup-keystroke-command-item gesture ct)
+                    (command-menu-item-value item))))
+       ct)
+      (is (= 1 count)))))
 
 (test commands.map-over-command-table-keystrokes.menu
-  (let ((count 0))
+  (let ((count 0)
+        (ct (make-command-table nil)))
+    (add-command-to-command-table
+     '(com-test-command) ct :keystroke '(#\u) :menu "Test")
     (map-over-command-table-keystrokes
      (lambda (menu-name gesture item)
        (incf count)
        (is (equal "Test" menu-name))
        (is (equal '(:keyboard #\u 0) gesture))
-       (is (equal (lookup-keystroke-command-item
-                   gesture 'menu-test-table)
+       (is (equal (lookup-keystroke-command-item gesture ct)
                   (command-menu-item-value item))))
-     'menu-test-table)
+     ct)
     (is (= 1 count))))
 
-;; (define-command-table removal-test-table)
-;; (add-command-to-command-table 'com-test-command 'removal-test-table)
-;; (remove-command-from-command-table 'com-test-command 'removal-test-table)
-;; (signals command-not-present
-;;   (remove-command-from-command-table 'com-test-command
-;;                                      'removal-test-table))
+(test commands.add-and-remove-command
+  (let ((ct (make-command-table nil)))
+    (add-command-to-command-table 'com-test-command ct)
+    (remove-command-from-command-table 'com-test-command ct)
+    (signals command-not-present
+      (remove-command-from-command-table 'com-test-command ct))))
 
+
+;;; command table inheritance
+
+(test commands.command-table-inheritance.smoke
+  ;; This test verifies that all inherited command tables are traversed.
+  (with-command-tables
+      ((ct nil :inherit-from ())
+       (ct.1 nil :inherit-from (list ct))
+       (ct.2 nil :inherit-from (list ct))
+       (ct.2.1 nil :inherit-from (list ct.2))
+       (ct.2.2 nil :inherit-from (list ct.2))
+       (ct.2.* nil :inherit-from (list ct.2.1 ct.2.2))
+       (ct.x.x nil :inherit-from (list ct ct.1))
+       (ct.x.y nil :inherit-from (list ct ct)))
+    (let ((acc nil))
+      (do-command-table-inheritance (ct ct.2.*)
+        ;; This macro may traverse the same command table multiple times,
+        ;; because the ancestor may be linked in a few places in the inheritance
+        ;; tree with different :inherit-menu values.
+        (pushnew ct acc))
+      (is (every (lambda (ct) (member ct acc :test #'eq))
+                 (list ct ct.2 ct.2.1 ct.2.2 ct.2.*)))
+      (is (every (lambda (ct) (not (member ct acc :test #'eq)))
+                 (list ct.1 ct.x.x ct.x.y))))))
+
+
 ;;; command table errors (see 27.2)
 
-;; (is (subtypep 'command-table-error 'error))
-;; (is (subtypep 'command-table-not-found 'command-table-error))
-;; (is (subtypep 'command-table-already-exists 'command-table-error))
-;; (is (subtypep 'command-not-present 'command-table-error))
-;; (is (subtypep 'command-not-accessible 'command-table-error))
-;; (is (subtypep 'command-already-present 'command-table-error))
-
-;; (let ((condition (make-condition 'command-table-error
-;;                                  :format-control "~A"
-;;                                  :format-arguments '(!))))
-;;   (is-true (find #\! (format nil "~A" condition))))
+(test commands.command-table-errors
+  (is (subtypep 'command-table-error 'error))
+  (is (subtypep 'command-table-not-found 'command-table-error))
+  (is (subtypep 'command-table-already-exists 'command-table-error))
+  (is (subtypep 'command-not-present 'command-table-error))
+  (is (subtypep 'command-not-accessible 'command-table-error))
+  (is (subtypep 'command-already-present 'command-table-error))
+  (let ((condition (make-condition 'command-table-error
+                                   :format-control "~A"
+                                   :format-arguments '(!))))
+    (is-true (find #\! (format nil "~A" condition)))))
 
 ;;; not actually required to DTRT here, but we use this form (without
 ;;; control and arguments) internally, so make sure that we don't
